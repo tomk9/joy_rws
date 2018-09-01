@@ -9,13 +9,17 @@ using namespace rw::math;
 using namespace rw::models;
 using namespace rw::kinematics;
 using namespace boost;
+// using rw::graphics::WorkCellScene;
+using rw::loaders::WorkCellFactory;
 
 Controller::Controller() : RobWorkStudioPlugin("Controller", QIcon(":/gamepad.png"))
 {
     _ui.setupUi(this);
 
     connect(_ui.pushButton_2, SIGNAL(clicked()), this, SLOT(ObslugaPrzyciskuConnect()));
-
+    // WorkCellScene::setWorkCell(*wc);
+    _wc = WorkCellFactory::load("/home/tomek/Documents/RobWork/workcell/Scene.wc.xml");
+    // getRobWorkStudio()->postWorkCell(_wc);
     joy_sub_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::joyCallback, this);
     initRumble();
     mainLoopThread = std::thread(mainLoop);
@@ -34,6 +38,9 @@ void Controller::initialize()
     //getRobWorkStudio()->keyEvent().add(boost::bind(&RWSPlugin::keyEventListener, this, _1, _2), this);
 
     log().setLevel(Log::Info);
+    while (!_wc)
+        ;
+    getRobWorkStudio()->postWorkCell(_wc);
     //   robotUR5 = new RobotInterface();
     //  Log::infoLog() << "Inicjalizacja";
 }
@@ -43,7 +50,7 @@ void Controller::open(WorkCell *workcell)
 
     try
     {
-        _wc = workcell;
+        // _wc = workcell;
         _state = getRobWorkStudio()->getState();
     }
     catch (const rw::common::Exception &e)
@@ -112,8 +119,8 @@ void Controller::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
     Log::infoLog() << "Callback..." << endl;
     for (int i = 0; i < 5; ++i)
     {
-        Controller::twist[i] = Controller::a_scale_ * joy->axes[i];
-        Log::infoLog() << Controller::twist[i] << endl;
+        twist[i] = a_scale_ * joy->axes[i];
+        Log::infoLog() << twist[i] << endl;
     }
 }
 

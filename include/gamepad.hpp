@@ -3,6 +3,8 @@
 #include <QObject>
 #include <rws/RobWorkStudioPlugin.hpp>
 #include <rw/models/WorkCell.hpp>
+#include <rw/loaders/WorkCellLoader.hpp>
+#include <rw/graphics/WorkCellScene.hpp>
 #include <QtGui>
 #include <ros/ros.h>
 #include <sensor_msgs/Joy.h>
@@ -79,6 +81,7 @@ class Controller : public rws::RobWorkStudioPlugin,
 	void keyEventListener(int key, Qt::KeyboardModifiers modifier);
 
 	void joyCallback(const sensor_msgs::Joy::ConstPtr &joy);
+	// rw::models::WorkCell::Ptr _wc;
 
   private slots:
 	void ObslugaPrzyciskuConnect();
@@ -89,7 +92,8 @@ class Controller : public rws::RobWorkStudioPlugin,
 
 	std::thread mainLoopThread;
 
-	rw::models::WorkCell *_wc;
+	rw::models::WorkCell::Ptr _wc;
+	// rw::common::Ptr<rw::models::WorkCell> _wc;
 	rw::kinematics::State _state;
 	ros::NodeHandle nh_;
 	ros::Subscriber joy_sub_;
