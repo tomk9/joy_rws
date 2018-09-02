@@ -5,6 +5,15 @@
 #include <rw/models/WorkCell.hpp>
 #include <rw/loaders/WorkCellLoader.hpp>
 #include <rw/graphics/WorkCellScene.hpp>
+#include <rw/math/Q.hpp>
+#include <rw/invkin/ClosedFormIKSolverUR.hpp>
+#include <rw/proximity/CollisionDetector.hpp>
+#include <rw/kinematics/MovableFrame.hpp>
+#include <rw/kinematics/Kinematics.hpp>
+#include <rw/models/RevoluteJoint.hpp>
+#include <rw/math/MetricUtil.hpp>
+#include <rw/models/SerialDevice.hpp>
+#include <rwlibs/proximitystrategies/ProximityStrategyFactory.hpp>
 #include <QtGui>
 #include <ros/ros.h>
 #include <sensor_msgs/Joy.h>
@@ -26,8 +35,12 @@
 #include <linux/input.h>
 
 #define N_EFFECTS 3
+#define N_AXES 8
+#define N_BUTTONS 11
 
-void mainLoop();
+#define INFO rw::common::Log::log().info()
+
+// void mainLoop();
 void rumble(int i);
 void initRumble();
 
@@ -54,6 +67,7 @@ class Controller : public rws::RobWorkStudioPlugin,
 	Q_INTERFACES(rws::RobWorkStudioPlugin)
 
   public:
+	typedef std::pair<rw::math::Q, double> IKSolution;
 	//! @brief constructor
 	Controller();
 
@@ -82,6 +96,13 @@ class Controller : public rws::RobWorkStudioPlugin,
 
 	void joyCallback(const sensor_msgs::Joy::ConstPtr &joy);
 	// rw::models::WorkCell::Ptr _wc;
+	void updateGhost(int mode = 1);
+	void mainLoop();
+	rw::math::Q ik(rw::models::Device::Ptr robot, const rw::math::Transform3D<> &t, const rw::kinematics::State &state);
+	bool checkCollision(rw::models::Device::Ptr robot, const rw::math::Q &q);
+	std::vector<rw::math::Q> expandQ(const std::vector<rw::math::Q> &config);
+	// double axes[N_AXES];
+	// int buuttons[N_BUTTONS];
 
   private slots:
 	void ObslugaPrzyciskuConnect();
@@ -98,8 +119,17 @@ class Controller : public rws::RobWorkStudioPlugin,
 	ros::NodeHandle nh_;
 	ros::Subscriber joy_sub_;
 
-	double a_scale_ = 1;
-	double twist[5];
+	// double a_scale_ = 1;
+	double axes[N_AXES] = {0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0};
+	int buttons[N_BUTTONS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+	rw::models::Device::Ptr _robot;
+	rw::models::Device::Ptr _ghost;
+	rw::models::SerialDevice::Ptr _sdghost;
+	rw::invkin::ClosedFormIKSolverUR::Ptr _invkin;
+	rw::proximity::CollisionDetector::Ptr _cd;
+	rw::kinematics::Frame *_real_tcp_frame;
+	rw::kinematics::Frame *_ghost_tcp_frame;
+	std::vector<IKSolution> _iksolutions;
 
 	//   RobotInterface* robotUR5;
 };

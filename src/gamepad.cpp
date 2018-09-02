@@ -9,7 +9,6 @@ using namespace rw::math;
 using namespace rw::models;
 using namespace rw::kinematics;
 using namespace boost;
-// using rw::graphics::WorkCellScene;
 using rw::loaders::WorkCellFactory;
 
 Controller::Controller() : RobWorkStudioPlugin("Controller", QIcon(":/gamepad.png"))
@@ -22,7 +21,7 @@ Controller::Controller() : RobWorkStudioPlugin("Controller", QIcon(":/gamepad.pn
     // getRobWorkStudio()->postWorkCell(_wc);
     joy_sub_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::joyCallback, this);
     initRumble();
-    mainLoopThread = std::thread(mainLoop);
+    // std::thread(&Controller::mainLoop, this).detach();
     // ros::spin();
     // Log::infoLog() << "Konstruktor";
 }
@@ -40,7 +39,8 @@ void Controller::initialize()
     log().setLevel(Log::Info);
     while (!_wc)
         ;
-    getRobWorkStudio()->postWorkCell(_wc);
+    getRobWorkStudio()->setWorkcell(_wc);
+    std::thread(&Controller::mainLoop, this).detach();
     //   robotUR5 = new RobotInterface();
     //  Log::infoLog() << "Inicjalizacja";
 }
@@ -52,6 +52,24 @@ void Controller::open(WorkCell *workcell)
     {
         // _wc = workcell;
         _state = getRobWorkStudio()->getState();
+        _robot = _wc->findDevice("robot");
+        if (!_robot)
+        {
+            INFO << "robot device not found" << endl;
+        }
+
+        // find ghost robot device
+        _ghost = _wc->findDevice("ghost");
+        if (!_ghost)
+        {
+            INFO << "ghost not found" << endl;
+        }
+        _sdghost = new rw::models::SerialDevice(_ghost->getBase(), _ghost->getEnd(), _ghost->getName(), _state);
+        _invkin = new rw::invkin::ClosedFormIKSolverUR(_sdghost, _wc->getDefaultState());
+        _invkin->setCheckJointLimits(true);
+
+        // initialize collision detector
+        // _cd = new rw::proximity::CollisionDetector(_wc, rwlibs::proximitystrategies::ProximityStrategyFactory::makeDefaultCollisionStrategy());
     }
     catch (const rw::common::Exception &e)
     {
@@ -117,19 +135,198 @@ void Controller::ObslugaPrzyciskuConnect()
 void Controller::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
 {
     Log::infoLog() << "Callback..." << endl;
-    for (int i = 0; i < 5; ++i)
+    for (int i = 0; i < N_AXES; ++i)
     {
-        twist[i] = a_scale_ * joy->axes[i];
-        Log::infoLog() << twist[i] << endl;
+        axes[i] = joy->axes[i];
+        if (std::abs(axes[i]) < 0.2)
+        {
+            axes[i] = 0;
+        }
+        Log::infoLog() << axes[i] << endl;
+    }
+    for (int i = 0; i < N_BUTTONS; ++i)
+    {
+        buttons[i] = joy->buttons[i];
+        Log::infoLog() << buttons[i] << endl;
     }
 }
 
-void mainLoop()
+void Controller::updateGhost(int mode)
 {
+    double scale = 0.001;
+    if (_ghost)
+    {
+        rw::math::Q q = _ghost->getQ(_state);
+        switch (mode)
+        {
+        case 0:
+            // Log::infoLog() << q << endl;
+            q[0] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[0];
+            q[1] += scale * (1 + buttons[4] + 2 * buttons[5]) * (-axes[1]);
+            q[2] += scale * (1 + buttons[4] + 2 * buttons[5]) * (axes[2] - axes[5]);
+            q[3] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[3];
+            q[4] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[4];
+            q[5] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[6];
+            break;
+        case 1:
+            // Transform3D<> t3 = rw::kinematics::Kinematics::frameTframe(_ghost->getBase(), _ghost->getEnd(), _state);
+            rw::math::Transform3D<> t3(Vector3D<>(buttons[5] * 0.1, 0.0, 0.0), RPY<>(0.0, 0.0, 0.0).toRotation3D());
+            rw::math::Q q1 = ik(_ghost, t3, _state);
+            if (q1.size() == q.size())
+            {
+                q = q1;
+            }
+            break;
+        }
+        // rw::math::Q q = _ghost->getQ(_state);
+        // Log::infoLog() << q << endl;
+        // q[0] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[0];
+        // q[1] += scale * (1 + buttons[4] + 2 * buttons[5]) * (-axes[1]);
+        // q[2] += scale * (1 + buttons[4] + 2 * buttons[5]) * (axes[2] - axes[5]);
+        // q[3] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[3];
+        // q[4] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[4];
+        // q[5] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[6];
+        _ghost->setQ(q, _state);
+        getRobWorkStudio()->setState(_state);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+rw::math::Q Controller::ik(rw::models::Device::Ptr robot, const rw::math::Transform3D<> &t, const rw::kinematics::State &state)
+{
+    rw::kinematics::Frame *end = robot->getEnd();
+    rw::kinematics::Frame *base = robot->getBase();
+    rw::math::Transform3D<> toolTend = rw::kinematics::Kinematics::frameTframe(base, end, state);
+    rw::math::Transform3D<> endT = t * toolTend;
+
+    vector<rw::math::Q> possibleConfigurations, validConfigurations;
+    possibleConfigurations = _invkin->solve(endT, state);
+    //INFO << "Found " << possibleConfigurations.size() << " possible configurations" << endl;
+
+    for (vector<rw::math::Q>::iterator i = possibleConfigurations.begin(); i != possibleConfigurations.end(); ++i)
+    {
+        if (!checkCollision(robot, *i))
+        {
+            validConfigurations.push_back(*i);
+        }
+        // validConfigurations.push_back(*i);
+    }
+    validConfigurations = expandQ(validConfigurations);
+    //INFO << "Found " << validConfigurations.size() << " valid configurations" << endl;
+
+    rw::math::Q current_q = robot->getQ(state);
+    vector<rw::math::Q>::iterator closest_q = validConfigurations.begin();
+    double dist = 1000.0;
+    for (vector<rw::math::Q>::iterator i = validConfigurations.begin(); i != validConfigurations.end(); ++i)
+    {
+
+        Q q1 = *i;
+        Q q2 = current_q;
+
+        q1[1] = q1[1] * 2;
+        q2[1] = q2[1] * 2;
+
+        double d = rw::math::MetricUtil::dist2<rw::math::Q>(q1, q2);
+        if (d < dist)
+        {
+            dist = d;
+            closest_q = i;
+        }
+    }
+
+    if (validConfigurations.size() == 0)
+    {
+        INFO << "No valid Q found!" << endl;
+        rumble(2);
+        return rw::math::Q();
+    }
+    else
+    {
+        return *closest_q;
+    }
+}
+
+bool Controller::checkCollision(rw::models::Device::Ptr robot, const rw::math::Q &q)
+{
+    bool ret = false;
+
+    rw::kinematics::State testState = _state.clone();
+    robot->setQ(q, testState);
+
+    if (_cd->inCollision(testState))
+    {
+        ret = true;
+    }
+
+    return ret;
+}
+
+std::vector<rw::math::Q> Controller::expandQ(const std::vector<rw::math::Q> &config)
+{
+    std::vector<rw::math::Q> res1 = config;
+    std::vector<rw::math::Q> res2;
+    const double pi2 = 2 * rw::math::Pi;
+    rw::math::Q lower, upper;
+    std::vector<size_t> indices;
+    const std::vector<rw::models::Joint *> &joints = _sdghost->getJoints();
+    size_t index = 0;
+    BOOST_FOREACH (const rw::models::Joint *joint, joints)
+    {
+        if (dynamic_cast<rw::models::RevoluteJoint *>(joints[index]))
+        {
+            for (int i = 0; i < joint->getDOF(); i++)
+            {
+                indices.push_back(index);
+                ++index;
+            }
+        }
+        else
+        {
+            index += joint->getDOF();
+        }
+    }
+
+    lower = _sdghost->getBounds().first;
+    upper = _sdghost->getBounds().second;
+
+    for (auto index : indices)
+    {
+        res2.clear();
+        //        std::cout<<"Index = "<<index<<std::endl;
+        for (auto q : res1)
+        {
+            //std::cout<<"Input= "<<q<<std::endl;
+
+            double d = q(index);
+            while (d > lower(index))
+                d -= pi2;
+            while (d < lower(index))
+                d += pi2;
+            while (d < upper(index))
+            {
+                rw::math::Q tmp(q);
+                tmp(index) = d;
+                res2.push_back(tmp);
+                //  std::cout<<"Output = "<<tmp<<std::endl;
+                d += pi2;
+            }
+        }
+        res1 = res2;
+        //std::cout<<"Output Count = "<<res1.size()<<std::endl;
+    }
+    return res1;
+}
+
+void Controller::mainLoop()
+{
+    // initialize collision detector
+    _cd = new rw::proximity::CollisionDetector(_wc, rwlibs::proximitystrategies::ProximityStrategyFactory::makeDefaultCollisionStrategy());
+
     while (true)
     {
-        Log::infoLog() << "loop" << endl;
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        // Log::infoLog() << "loop" << endl;
+        updateGhost();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
         ros::spinOnce();
     }
 }
