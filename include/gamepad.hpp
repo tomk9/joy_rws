@@ -96,7 +96,7 @@ class Controller : public rws::RobWorkStudioPlugin,
 
 	void joyCallback(const sensor_msgs::Joy::ConstPtr &joy);
 	// rw::models::WorkCell::Ptr _wc;
-	void updateGhost(int mode = 1);
+	void updateGhost();
 	void mainLoop();
 	rw::math::Q ik(rw::models::Device::Ptr robot, const rw::math::Transform3D<> &t, const rw::kinematics::State &state);
 	bool checkCollision(rw::models::Device::Ptr robot, const rw::math::Q &q);
@@ -130,6 +130,7 @@ class Controller : public rws::RobWorkStudioPlugin,
 	rw::kinematics::Frame *_real_tcp_frame;
 	rw::kinematics::Frame *_ghost_tcp_frame;
 	std::vector<IKSolution> _iksolutions;
+	int _steeringMode = 0;
 
 	//   RobotInterface* robotUR5;
 };

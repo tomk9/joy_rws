@@ -149,33 +149,63 @@ void Controller::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
         buttons[i] = joy->buttons[i];
         Log::infoLog() << buttons[i] << endl;
     }
+    if (buttons[6] == 1)
+    {
+        _steeringMode = 0;
+    }
+    else if (buttons[7] == 1)
+    {
+        _steeringMode = 1;
+    }
 }
 
-void Controller::updateGhost(int mode)
+void Controller::updateGhost()
 {
     double scale = 0.001;
+    double scaleL = 0.001;
+    double scaleR = 0.001;
     if (_ghost)
     {
         rw::math::Q q = _ghost->getQ(_state);
-        switch (mode)
+        std::vector<rw::math::Q> config;
+        switch (_steeringMode)
         {
         case 0:
             // Log::infoLog() << q << endl;
             q[0] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[0];
             q[1] += scale * (1 + buttons[4] + 2 * buttons[5]) * (-axes[1]);
-            q[2] += scale * (1 + buttons[4] + 2 * buttons[5]) * (axes[2] - axes[5]);
+            q[2] += scale * (1 + buttons[4] + 2 * buttons[5]) * (axes[2] - axes[5]) / 2;
             q[3] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[3];
             q[4] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[4];
             q[5] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[6];
+
+            config.push_back(q);
+            config = expandQ(config);
+            if (!checkCollision(_ghost, config[0]))
+            {
+                _ghost->setQ(q, _state);
+            }
+            else
+            {
+                rumble(2);
+            }
             break;
         case 1:
             // Transform3D<> t3 = rw::kinematics::Kinematics::frameTframe(_ghost->getBase(), _ghost->getEnd(), _state);
-            rw::math::Transform3D<> t3(Vector3D<>(buttons[5] * 0.1, 0.0, 0.0), RPY<>(0.0, 0.0, 0.0).toRotation3D());
+            rw::math::Transform3D<> t3(
+                Vector3D<>(scaleL * (1 + buttons[4] + 2 * buttons[5]) * axes[0],
+                           scaleL * (1 + buttons[4] + 2 * buttons[5]) * axes[1],
+                           scaleL * (1 + buttons[4] + 2 * buttons[5]) * (axes[2] - axes[5]) / 2),
+                RPY<>(scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[3],
+                      scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[4],
+                      scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[6])
+                    .toRotation3D());
             rw::math::Q q1 = ik(_ghost, t3, _state);
             if (q1.size() == q.size())
             {
                 q = q1;
             }
+            _ghost->setQ(q, _state);
             break;
         }
         // rw::math::Q q = _ghost->getQ(_state);
@@ -186,7 +216,7 @@ void Controller::updateGhost(int mode)
         // q[3] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[3];
         // q[4] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[4];
         // q[5] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[6];
-        _ghost->setQ(q, _state);
+        // _ghost->setQ(q, _state);
         getRobWorkStudio()->setState(_state);
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
