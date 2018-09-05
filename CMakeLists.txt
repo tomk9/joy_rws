@@ -146,11 +146,11 @@ link_directories(
 set(UisFiles src/gamepad.ui)
 set(HppFiles
   include/gamepad.hpp
-  # include/RobotInterface.hpp
+  include/RobotInterface.hpp
 )
 set(SrcFiles
   src/gamepad.cpp
-  # src/RobotInterface.cpp
+  src/RobotInterface.cpp
   # src/CircleTrajectory.cpp
 )
 

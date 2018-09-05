@@ -20,6 +20,8 @@
 #include <thread>
 #include <chrono>
 
+#include "RobotInterface.hpp"
+
 #include "ui_gamepad.h"
 
 #include <string>
@@ -131,6 +133,10 @@ class Controller : public rws::RobWorkStudioPlugin,
 	rw::kinematics::Frame *_ghost_tcp_frame;
 	std::vector<IKSolution> _iksolutions;
 	int _steeringMode = 0;
+	int _updatingMode = 0;
+	bool _connected = false;
+	volatile bool _back_ghost_to_robot = false;
 
-	//   RobotInterface* robotUR5;
+	RobotInterface *robotUR5;
+	rw::math::Q q_ghost;
 };

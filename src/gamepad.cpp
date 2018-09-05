@@ -21,6 +21,7 @@ Controller::Controller() : RobWorkStudioPlugin("Controller", QIcon(":/gamepad.pn
     // getRobWorkStudio()->postWorkCell(_wc);
     joy_sub_ = nh_.subscribe<sensor_msgs::Joy>("joy", 10, &Controller::joyCallback, this);
     initRumble();
+    robotUR5 = new RobotInterface();
     // std::thread(&Controller::mainLoop, this).detach();
     // ros::spin();
     // Log::infoLog() << "Konstruktor";
@@ -127,10 +128,15 @@ void Controller::keyEventListener(int key, Qt::KeyboardModifiers modifier)
 
 void Controller::ObslugaPrzyciskuConnect()
 {
-    Log::infoLog() << "Connecting..." << endl;
-    //   if (robotUR5->connect()) {
-    //     Log::infoLog() << "Connected" << endl;
-    //   }
+    if (!_connected)
+    {
+        Log::infoLog() << "Connecting..." << endl;
+        if (robotUR5->connect())
+        {
+            Log::infoLog() << "Connected" << endl;
+            _connected = true;
+        }
+    }
 }
 void Controller::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
 {
@@ -142,12 +148,12 @@ void Controller::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
         {
             axes[i] = 0;
         }
-        Log::infoLog() << axes[i] << endl;
+        // Log::infoLog() << axes[i] << endl;
     }
     for (int i = 0; i < N_BUTTONS; ++i)
     {
         buttons[i] = joy->buttons[i];
-        Log::infoLog() << buttons[i] << endl;
+        // Log::infoLog() << buttons[i] << endl;
     }
     if (buttons[6] == 1)
     {
@@ -157,6 +163,44 @@ void Controller::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
     {
         _steeringMode = 1;
     }
+    if (buttons[8] == 1)
+    {
+        ObslugaPrzyciskuConnect();
+        // rwhw::URRTData data = robotUR5->getData();
+        // rw::math::Q q = data.qActual;
+        // rw::math::Q dq = data.dqActual;
+
+        // if (q.size() == 6)
+        // {
+        //     _robot->setQ(q, _state);
+        //     // getRobWorkStudio()->setState(_state);
+        // }
+
+        // robotUR5->move_to_q(rw::math::Q(6, 0, -1.57, 0, -1.57, 0, 0), 100, 3000);
+    }
+    if (buttons[0] == 1)
+    {
+        if (_updatingMode == 0)
+        {
+            _updatingMode = 1;
+        }
+        else
+        {
+            robotUR5->move_to_q(q_ghost, 100, 3000);
+            _updatingMode = 0;
+        }
+
+        // robotUR5->move_to_q(q_ghost, 100, 3000);
+    }
+    else if (buttons[1] == 1)
+    {
+        if (_updatingMode == 1)
+        {
+            _back_ghost_to_robot = true;
+            _updatingMode = 0;
+        }
+    }
+    // Log::infoLog() << (bool)axes[1] << endl;
 }
 
 void Controller::updateGhost()
@@ -166,48 +210,61 @@ void Controller::updateGhost()
     double scaleR = 0.001;
     if (_ghost)
     {
-        rw::math::Q q = _ghost->getQ(_state);
-        std::vector<rw::math::Q> config;
-        switch (_steeringMode)
+        if (axes[0] || axes[1] || (axes[2] - axes[5]) || axes[3] || axes[4] || axes[6])
         {
-        case 0:
-            // Log::infoLog() << q << endl;
-            q[0] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[0];
-            q[1] += scale * (1 + buttons[4] + 2 * buttons[5]) * (-axes[1]);
-            q[2] += scale * (1 + buttons[4] + 2 * buttons[5]) * (axes[2] - axes[5]) / 2;
-            q[3] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[3];
-            q[4] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[4];
-            q[5] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[6];
+            rw::math::Q q = _ghost->getQ(_state);
+            std::vector<rw::math::Q> config;
+            switch (_steeringMode)
+            {
+            case 0:
+                // Log::infoLog() << q << endl;
+                q[0] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[0];
+                q[1] += scale * (1 + buttons[4] + 2 * buttons[5]) * (-axes[1]);
+                q[2] += scale * (1 + buttons[4] + 2 * buttons[5]) * (axes[2] - axes[5]) / 2;
+                q[3] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[3];
+                q[4] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[4];
+                q[5] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[6];
 
-            config.push_back(q);
-            config = expandQ(config);
-            if (!checkCollision(_ghost, config[0]))
-            {
+                config.push_back(q);
+                config = expandQ(config);
+                if (!checkCollision(_ghost, config[0]))
+                {
+                    _ghost->setQ(q, _state);
+                    q_ghost = q;
+                }
+                else
+                {
+                    rumble(2);
+                }
+                break;
+            case 1:
+                // Transform3D<> t3 = rw::kinematics::Kinematics::frameTframe(_ghost->getBase(), _ghost->getEnd(), _state);
+                rw::math::Transform3D<> t3(
+                    Vector3D<>(scaleL * (1 + buttons[4] + 2 * buttons[5]) * axes[0],
+                               scaleL * (1 + buttons[4] + 2 * buttons[5]) * axes[1],
+                               scaleL * (1 + buttons[4] + 2 * buttons[5]) * (axes[2] - axes[5]) / 2),
+                    RPY<>(scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[3],
+                          scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[4],
+                          scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[6])
+                        .toRotation3D());
+                rw::math::Q q1 = ik(_ghost, t3, _state);
+                if (q1.size() == q.size())
+                {
+                    q = q1;
+                }
                 _ghost->setQ(q, _state);
+                q_ghost = q;
+                break;
             }
-            else
-            {
-                rumble(2);
-            }
-            break;
-        case 1:
-            // Transform3D<> t3 = rw::kinematics::Kinematics::frameTframe(_ghost->getBase(), _ghost->getEnd(), _state);
-            rw::math::Transform3D<> t3(
-                Vector3D<>(scaleL * (1 + buttons[4] + 2 * buttons[5]) * axes[0],
-                           scaleL * (1 + buttons[4] + 2 * buttons[5]) * axes[1],
-                           scaleL * (1 + buttons[4] + 2 * buttons[5]) * (axes[2] - axes[5]) / 2),
-                RPY<>(scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[3],
-                      scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[4],
-                      scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[6])
-                    .toRotation3D());
-            rw::math::Q q1 = ik(_ghost, t3, _state);
-            if (q1.size() == q.size())
-            {
-                q = q1;
-            }
-            _ghost->setQ(q, _state);
-            break;
         }
+        if (_back_ghost_to_robot)
+        {
+            rw::math::Q q = _robot->getQ(_state);
+            _ghost->setQ(q, _state);
+            q_ghost = q;
+            _back_ghost_to_robot = false;
+        }
+
         // rw::math::Q q = _ghost->getQ(_state);
         // Log::infoLog() << q << endl;
         // q[0] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[0];
@@ -217,8 +274,19 @@ void Controller::updateGhost()
         // q[4] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[4];
         // q[5] += scale * (1 + buttons[4] + 2 * buttons[5]) * axes[6];
         // _ghost->setQ(q, _state);
+
+        // TODO: uncomment this \/
+
+        // rwhw::URRTData data = robotUR5->getData();
+        rw::math::Q q = rw::math::Q(6, 0, -1.57, 0, -1.57, 0, 0);// data.qActual;
+        // rw::math::Q dq = data.dqActual;
+
+        if (q.size() == 6)
+        {
+            _robot->setQ(q, _state);
+        }
         getRobWorkStudio()->setState(_state);
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10)); //after setState it must be a delay to refresh screen
     }
 }
 
