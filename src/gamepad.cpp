@@ -186,6 +186,7 @@ void Controller::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
         }
         else
         {
+            // TODO: zastanowaić się tutaj czy nie przenieść do mainLoop i stworzyc flage
             robotUR5->move_to_q(q_ghost, 100, 3000);
             _updatingMode = 0;
         }
@@ -278,7 +279,7 @@ void Controller::updateGhost()
         // TODO: uncomment this \/
 
         // rwhw::URRTData data = robotUR5->getData();
-        rw::math::Q q = rw::math::Q(6, 0, -1.57, 0, -1.57, 0, 0);// data.qActual;
+        rw::math::Q q = rw::math::Q(6, 0, -1.57, 0, -1.57, 0, 0); // data.qActual;
         // rw::math::Q dq = data.dqActual;
 
         if (q.size() == 6)
@@ -424,6 +425,10 @@ void Controller::mainLoop()
     {
         // Log::infoLog() << "loop" << endl;
         updateGhost();
+        if (_updatingMode == 0)
+        {
+            robotUR5->move_to_q(q_ghost, 100, 3000);
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         ros::spinOnce();
     }

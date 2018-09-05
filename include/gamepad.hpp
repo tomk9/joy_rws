@@ -133,7 +133,7 @@ class Controller : public rws::RobWorkStudioPlugin,
 	rw::kinematics::Frame *_ghost_tcp_frame;
 	std::vector<IKSolution> _iksolutions;
 	int _steeringMode = 0;
-	int _updatingMode = 0;
+	volatile int _updatingMode = 0;
 	bool _connected = false;
 	volatile bool _back_ghost_to_robot = false;
 
