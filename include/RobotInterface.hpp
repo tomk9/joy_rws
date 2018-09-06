@@ -10,26 +10,23 @@
 #include <ros/ros.h>
 #include <rw/math/MetricUtil.hpp>
 
+class RobotInterface
+{
+  public:
+    RobotInterface();
+    bool connect();
+    rwhw::URRTData getData();
+    bool move_to_q(const rw::math::Q &q, double speed, double timeout);
+    bool servo_q(const rw::math::Q &q);
+    bool robotConnect();
+    ~RobotInterface();
 
+  protected:
+    bool robotReachedQ(const rw::math::Q &q, double eps = 1e-3);
 
-class RobotInterface {
-    public:
-        RobotInterface();
-        bool connect();
-        rwhw::URRTData getData();
-        bool move_to_q(const rw::math::Q& q, double speed, double timeout);
-        bool robotConnect();
-        ~RobotInterface();
-
-    protected:
-        bool robotReachedQ(const rw::math::Q& q, double eps=1e-3);
-
-    private:
-        rwhw::UniversalRobotsRTLogging* _ur_log;
-        rwhw::URCallBackInterface* _ur_cb;
-
-
+  private:
+    rwhw::UniversalRobotsRTLogging *_ur_log;
+    rwhw::URCallBackInterface *_ur_cb;
 };
-
 
 #endif

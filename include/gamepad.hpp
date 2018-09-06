@@ -100,7 +100,7 @@ class Controller : public rws::RobWorkStudioPlugin,
 	// rw::models::WorkCell::Ptr _wc;
 	void updateGhost();
 	void mainLoop();
-	rw::math::Q ik(rw::models::Device::Ptr robot, const rw::math::Transform3D<> &t, const rw::kinematics::State &state);
+	rw::math::Q ik(rw::models::Device::Ptr robot, const rw::math::Transform3D<> &t_pos, const rw::math::Transform3D<> &t_rot, const rw::kinematics::State &state);
 	bool checkCollision(rw::models::Device::Ptr robot, const rw::math::Q &q);
 	std::vector<rw::math::Q> expandQ(const std::vector<rw::math::Q> &config);
 	// double axes[N_AXES];
@@ -136,7 +136,8 @@ class Controller : public rws::RobWorkStudioPlugin,
 	volatile int _updatingMode = 0;
 	bool _connected = false;
 	volatile bool _back_ghost_to_robot = false;
+	volatile bool _move_robot_to_ghost = false;
 
 	RobotInterface *robotUR5;
-	rw::math::Q q_ghost;
+	rw::math::Q q_ghost = rw::math::Q(6, 0, -1.57, 0, -1.57, 0, 0);
 };

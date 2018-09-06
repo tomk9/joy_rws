@@ -140,7 +140,7 @@ void Controller::ObslugaPrzyciskuConnect()
 }
 void Controller::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
 {
-    Log::infoLog() << "Callback..." << endl;
+    // Log::infoLog() << "Callback..." << endl;
     for (int i = 0; i < N_AXES; ++i)
     {
         axes[i] = joy->axes[i];
@@ -187,7 +187,11 @@ void Controller::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
         else
         {
             // TODO: zastanowaić się tutaj czy nie przenieść do mainLoop i stworzyc flage
-            robotUR5->move_to_q(q_ghost, 100, 3000);
+            if (_connected)
+            {
+                _move_robot_to_ghost = true;
+                // robotUR5->move_to_q(q_ghost, 100, 3000);
+            }
             _updatingMode = 0;
         }
 
@@ -244,11 +248,19 @@ void Controller::updateGhost()
                     Vector3D<>(scaleL * (1 + buttons[4] + 2 * buttons[5]) * axes[0],
                                scaleL * (1 + buttons[4] + 2 * buttons[5]) * axes[1],
                                scaleL * (1 + buttons[4] + 2 * buttons[5]) * (axes[2] - axes[5]) / 2),
-                    RPY<>(scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[3],
-                          scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[4],
-                          scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[6])
+                    RPY<>(0.0,
+                          0.0,
+                          0.0)
                         .toRotation3D());
-                rw::math::Q q1 = ik(_ghost, t3, _state);
+                rw::math::Transform3D<> t4(
+                    Vector3D<>(0.0,
+                               0.0,
+                               0.0),
+                    RPY<>(scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[6],
+                          scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[4],
+                          scaleR * (1 + buttons[4] + 2 * buttons[5]) * axes[3])
+                        .toRotation3D());
+                rw::math::Q q1 = ik(_ghost, t3, t4, _state);
                 if (q1.size() == q.size())
                 {
                     q = q1;
@@ -277,26 +289,28 @@ void Controller::updateGhost()
         // _ghost->setQ(q, _state);
 
         // TODO: uncomment this \/
-
-        // rwhw::URRTData data = robotUR5->getData();
-        rw::math::Q q = rw::math::Q(6, 0, -1.57, 0, -1.57, 0, 0); // data.qActual;
-        // rw::math::Q dq = data.dqActual;
-
-        if (q.size() == 6)
+        if (_connected)
         {
-            _robot->setQ(q, _state);
+            rwhw::URRTData data = robotUR5->getData();
+            rw::math::Q q = data.qActual;
+            rw::math::Q dq = data.dqActual;
+
+            if (q.size() == 6)
+            {
+                _robot->setQ(q, _state);
+            }
         }
         getRobWorkStudio()->setState(_state);
         std::this_thread::sleep_for(std::chrono::milliseconds(10)); //after setState it must be a delay to refresh screen
     }
 }
 
-rw::math::Q Controller::ik(rw::models::Device::Ptr robot, const rw::math::Transform3D<> &t, const rw::kinematics::State &state)
+rw::math::Q Controller::ik(rw::models::Device::Ptr robot, const rw::math::Transform3D<> &t_pos, const rw::math::Transform3D<> &t_rot, const rw::kinematics::State &state)
 {
     rw::kinematics::Frame *end = robot->getEnd();
     rw::kinematics::Frame *base = robot->getBase();
     rw::math::Transform3D<> toolTend = rw::kinematics::Kinematics::frameTframe(base, end, state);
-    rw::math::Transform3D<> endT = t * toolTend;
+    rw::math::Transform3D<> endT = t_pos * toolTend * t_rot;
 
     vector<rw::math::Q> possibleConfigurations, validConfigurations;
     possibleConfigurations = _invkin->solve(endT, state);
@@ -421,15 +435,72 @@ void Controller::mainLoop()
     // initialize collision detector
     _cd = new rw::proximity::CollisionDetector(_wc, rwlibs::proximitystrategies::ProximityStrategyFactory::makeDefaultCollisionStrategy());
 
+    bool ready = false;
     while (true)
     {
         // Log::infoLog() << "loop" << endl;
         updateGhost();
-        if (_updatingMode == 0)
+        if (_connected && !ready)
         {
-            robotUR5->move_to_q(q_ghost, 100, 3000);
+            // std::this_thread::sleep_for(std::chrono::milliseconds(5000)); //after setState it must be a delay to refresh screen
+            ready = true;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        if (_updatingMode == 0 && ready)
+        {
+            rwhw::URRTData data = robotUR5->getData();
+            // rw::math::Q q = rw::math::Q(6, 0, -1.57, 0, -1.57, 0, 0);
+            rw::math::Q q = data.qActual;
+            if (q.size() == 6)
+            {
+                rw::math::Q differneceQ = q - q_ghost;
+                if (differneceQ.norm2() > 1 || _updatingMode == 1)
+                {
+                    robotUR5->move_to_q(q_ghost, 50, 3000);
+                    // rw::math::Q differneceQ;
+                    // do
+                    // {
+                    //     data = robotUR5->getData();
+                    //     q = data.qActual;
+                    //     if (q.size() == 6)
+                    //     {
+                    //         _robot->setQ(q, _state);
+                    //     }
+                    //     getRobWorkStudio()->setState(_state);
+                    //     differneceQ = q - q_ghost;
+                    //     std::this_thread::sleep_for(std::chrono::milliseconds(1)); //after setState it must be a delay to refresh screen
+                    // } while (differneceQ.norm2() > 0.01);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                }
+                else
+                {
+                    robotUR5->servo_q(q_ghost);
+                }
+            }
+            if (_move_robot_to_ghost)
+            {
+                _move_robot_to_ghost = false;
+                robotUR5->move_to_q(q_ghost, 50, 3000);
+                // rw::math::Q q;
+                // rwhw::URRTData data;
+                rw::math::Q differneceQ;
+                do
+                {
+                    data = robotUR5->getData();
+                    q = data.qActual;
+                    if (q.size() == 6)
+                    {
+                        _robot->setQ(q, _state);
+                    }
+                    getRobWorkStudio()->setState(_state);
+                    differneceQ = q - q_ghost;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1)); //after setState it must be a delay to refresh screen
+                } while (differneceQ.norm2() > 0.01);
+
+                // std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+            }
+            // robotUR5->move_to_q(q_ghost, 100, 3000);
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
         ros::spinOnce();
     }
 }
