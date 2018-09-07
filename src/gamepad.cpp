@@ -16,6 +16,8 @@ Controller::Controller() : RobWorkStudioPlugin("Controller", QIcon(":/gamepad.pn
     _ui.setupUi(this);
 
     connect(_ui.pushButton_2, SIGNAL(clicked()), this, SLOT(ObslugaPrzyciskuConnect()));
+    connect(_ui.pushButton_Start, SIGNAL(clicked()), this, SLOT(ObslugaPrzyciskuStart()));
+    connect(_ui.pushButton_Stop, SIGNAL(clicked()), this, SLOT(ObslugaPrzyciskuStop()));
     // WorkCellScene::setWorkCell(*wc);
     _wc = WorkCellFactory::load("/home/tomek/Documents/RobWork/workcell/Scene.wc.xml");
     // getRobWorkStudio()->postWorkCell(_wc);
@@ -135,6 +137,34 @@ void Controller::ObslugaPrzyciskuConnect()
         {
             Log::infoLog() << "Connected" << endl;
             _connected = true;
+        }
+    }
+}
+void Controller::ObslugaPrzyciskuStart()
+{
+    if (!_recording)
+    {
+        Log::infoLog() << "Recording..." << endl;
+
+        std::chrono::milliseconds ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch());
+        _myfile.open("/home/tomek/Documents/RobWork/measure/" + std::to_string(ms.count()) + ".csv");
+        _startTime = std::chrono::system_clock::now();
+        _myfile << "controllerTimeStamp,qTarget,dqTarget,ddqTarget,iTarget,torqueTarget,qActual,dqActual,iActual,accValues,tcpForce,toolPose,tcpSpeed" << std::endl;
+        _recording = true;
+    }
+}
+void Controller::ObslugaPrzyciskuStop()
+{
+    if (_recording)
+    {
+        _recording = false;
+        Log::infoLog() << "Stop recording" << endl;
+        if (_myfile)
+        {
+            // _recording = false;
+            _myfile.close();
+            // _recording = false;
         }
     }
 }
@@ -470,6 +500,7 @@ void Controller::mainLoop()
                     //     std::this_thread::sleep_for(std::chrono::milliseconds(1)); //after setState it must be a delay to refresh screen
                     // } while (differneceQ.norm2() > 0.01);
                     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                    ros::spinOnce();
                 }
                 else
                 {
@@ -493,7 +524,14 @@ void Controller::mainLoop()
                     }
                     getRobWorkStudio()->setState(_state);
                     differneceQ = q - q_ghost;
+                    if (_recording)
+                    {
+                        // std::string c(",");
+                        _myfile << data.controllerTimeStamp << "," << data.qTarget << "," << data.dqTarget << "," << data.ddqTarget << "," << data.iTarget << "," << data.torqueTarget << "," << data.qActual << "," << data.dqActual << "," << data.iActual << "," << data.accValues << "," << data.tcpForce << "," << data.toolPose << "," << data.tcpSpeed << std::endl;
+                    }
+                    // _myfile << data.controllerTimeStamp + "," + data.qTarget + "," + data.dqTarget + "," + data.ddqTarget + "," + data.iTarget + "," + data.torqueTarget + "," + data.qActual + "," + data.dqActual + "," + data.iActual + "," + data.accValues + "," + data.tcpForce + "," + data.toolPose + "," + data.tcpSpeed << std::endl;
                     std::this_thread::sleep_for(std::chrono::milliseconds(1)); //after setState it must be a delay to refresh screen
+                    ros::spinOnce();
                 } while (differneceQ.norm2() > 0.01);
 
                 // std::this_thread::sleep_for(std::chrono::milliseconds(5000));

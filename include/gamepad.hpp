@@ -19,6 +19,8 @@
 #include <sensor_msgs/Joy.h>
 #include <thread>
 #include <chrono>
+#include <iostream>
+#include <fstream>
 
 #include "RobotInterface.hpp"
 
@@ -108,6 +110,8 @@ class Controller : public rws::RobWorkStudioPlugin,
 
   private slots:
 	void ObslugaPrzyciskuConnect();
+	void ObslugaPrzyciskuStart();
+	void ObslugaPrzyciskuStop();
 
   private:
 	/* plugin interface widget */
@@ -140,4 +144,8 @@ class Controller : public rws::RobWorkStudioPlugin,
 
 	RobotInterface *robotUR5;
 	rw::math::Q q_ghost = rw::math::Q(6, 0, -1.57, 0, -1.57, 0, 0);
+
+	std::ofstream _myfile;
+	volatile bool _recording = false;
+	std::chrono::time_point<std::chrono::system_clock> _startTime;
 };
