@@ -150,7 +150,7 @@ void Controller::ObslugaPrzyciskuStart()
             std::chrono::system_clock::now().time_since_epoch());
         _myfile.open("/home/tomek/Documents/RobWork/measure/" + std::to_string(ms.count()) + ".csv");
         _startTime = std::chrono::system_clock::now();
-        _myfile << "controllerTimeStamp,qTarget,dqTarget,ddqTarget,iTarget,torqueTarget,qActual,dqActual,iActual,accValues,tcpForce,toolPose,tcpSpeed" << std::endl;
+        // _myfile << "controllerTimeStamp,qTarget,dqTarget,ddqTarget,iTarget,torqueTarget,qActual,dqActual,iActual,accValues,tcpForce,toolPose,tcpSpeed" << std::endl;
         _recording = true;
     }
 }
@@ -162,8 +162,12 @@ void Controller::ObslugaPrzyciskuStop()
         Log::infoLog() << "Stop recording" << endl;
         if (_myfile)
         {
+            Log::infoLog() << "saving" << endl;
             // _recording = false;
+            _myfile << _ss.str(); //rdbuf();
+            _myfile.flush();
             _myfile.close();
+            _ss.flush();
             // _recording = false;
         }
     }
@@ -276,7 +280,7 @@ void Controller::updateGhost()
                 // Transform3D<> t3 = rw::kinematics::Kinematics::frameTframe(_ghost->getBase(), _ghost->getEnd(), _state);
                 rw::math::Transform3D<> t3(
                     Vector3D<>(scaleL * (1 + buttons[4] + 2 * buttons[5]) * axes[0],
-                               scaleL * (1 + buttons[4] + 2 * buttons[5]) * axes[1],
+                               scaleL * (1 + buttons[4] + 2 * buttons[5]) * (-axes[1]),
                                scaleL * (1 + buttons[4] + 2 * buttons[5]) * (axes[2] - axes[5]) / 2),
                     RPY<>(0.0,
                           0.0,
@@ -505,6 +509,11 @@ void Controller::mainLoop()
                 else
                 {
                     robotUR5->servo_q(q_ghost);
+                    data = robotUR5->getData();
+                    if (_recording)
+                    {
+                        _ss << data.controllerTimeStamp << "," << data.qTarget << "," << data.dqTarget << "," << data.ddqTarget << "," << data.iTarget << "," << data.torqueTarget << "," << data.qActual << "," << data.dqActual << "," << data.iActual << "," << data.accValues << "," << data.tcpForce << "," << data.toolPose << "," << data.tcpSpeed << std::endl;
+                    }
                 }
             }
             if (_move_robot_to_ghost)
@@ -527,7 +536,11 @@ void Controller::mainLoop()
                     if (_recording)
                     {
                         // std::string c(",");
-                        _myfile << data.controllerTimeStamp << "," << data.qTarget << "," << data.dqTarget << "," << data.ddqTarget << "," << data.iTarget << "," << data.torqueTarget << "," << data.qActual << "," << data.dqActual << "," << data.iActual << "," << data.accValues << "," << data.tcpForce << "," << data.toolPose << "," << data.tcpSpeed << std::endl;
+                        // _ss << "c";
+                        // Log::infoLog() << data.controllerTimeStamp << "," << data.qTarget << "," << data.dqTarget << "," << data.ddqTarget << "," << data.iTarget << "," << data.torqueTarget << "," << data.qActual << "," << data.dqActual << "," << data.iActual << "," << data.accValues << "," << data.tcpForce << "," << data.toolPose << "," << data.tcpSpeed << std::endl;
+
+                        _ss << data.controllerTimeStamp << "," << data.qTarget << "," << data.dqTarget << "," << data.ddqTarget << "," << data.iTarget << "," << data.torqueTarget << "," << data.qActual << "," << data.dqActual << "," << data.iActual << "," << data.accValues << "," << data.tcpForce << "," << data.toolPose << "," << data.tcpSpeed << std::endl;
+                        // Log::infoLog() << _ss.rdbuf() << endl;
                     }
                     // _myfile << data.controllerTimeStamp + "," + data.qTarget + "," + data.dqTarget + "," + data.ddqTarget + "," + data.iTarget + "," + data.torqueTarget + "," + data.qActual + "," + data.dqActual + "," + data.iActual + "," + data.accValues + "," + data.tcpForce + "," + data.toolPose + "," + data.tcpSpeed << std::endl;
                     std::this_thread::sleep_for(std::chrono::milliseconds(1)); //after setState it must be a delay to refresh screen

@@ -148,4 +148,5 @@ class Controller : public rws::RobWorkStudioPlugin,
 	std::ofstream _myfile;
 	volatile bool _recording = false;
 	std::chrono::time_point<std::chrono::system_clock> _startTime;
+	std::stringstream _ss;
 };
