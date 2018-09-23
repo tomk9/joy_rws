@@ -1,4 +1,11 @@
 #pragma once
+// gnome-terminal -e roscore
+// gnome-terminal -e "rosrun joy joy_node"
+// gnome-terminal -e "roslaunch bender_evg55 bender_evg55_1.launch"
+// rws
+// rosservice call /bender_evg55_1/caros_gripper_service_interface/set_force_q "force: 
+//  data:
+//  - 0" 
 
 #include <QObject>
 #include <rws/RobWorkStudioPlugin.hpp>

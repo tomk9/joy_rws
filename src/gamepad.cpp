@@ -239,6 +239,14 @@ void Controller::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
             _updatingMode = 0;
         }
     }
+    if (axes[7] == 1)
+    {
+        std::system("rosservice call /bender_evg55_1/caros_gripper_service_interface/move_q \"q: \n  data:\n  - 0\" ");
+    }
+    else if (axes[7] == -1)
+    {
+        std::system("rosservice call /bender_evg55_1/caros_gripper_service_interface/move_q \"q: \n  data:\n  - 90\" ");
+    }
     // Log::infoLog() << (bool)axes[1] << endl;
 }
 
@@ -509,11 +517,11 @@ void Controller::mainLoop()
                 else
                 {
                     robotUR5->servo_q(q_ghost);
-                    data = robotUR5->getData();
-                    if (_recording)
-                    {
-                        _ss << data.controllerTimeStamp << "," << data.qTarget << "," << data.dqTarget << "," << data.ddqTarget << "," << data.iTarget << "," << data.torqueTarget << "," << data.qActual << "," << data.dqActual << "," << data.iActual << "," << data.accValues << "," << data.tcpForce << "," << data.toolPose << "," << data.tcpSpeed << std::endl;
-                    }
+                }
+                data = robotUR5->getData();
+                if (_recording)
+                {
+                    _ss << data.controllerTimeStamp << "," << data.qTarget << "," << data.dqTarget << "," << data.ddqTarget << "," << data.iTarget << "," << data.torqueTarget << "," << data.qActual << "," << data.dqActual << "," << data.iActual << "," << data.accValues << "," << data.tcpForce << "," << data.toolPose << "," << data.tcpSpeed << std::endl;
                 }
             }
             if (_move_robot_to_ghost)
@@ -550,6 +558,20 @@ void Controller::mainLoop()
                 // std::this_thread::sleep_for(std::chrono::milliseconds(5000));
             }
             // robotUR5->move_to_q(q_ghost, 100, 3000);
+        }
+        else if (_recording && ready)
+        {
+            rwhw::URRTData data = robotUR5->getData();
+            _ss << data.controllerTimeStamp << "," << data.qTarget << "," << data.dqTarget << "," << data.ddqTarget << "," << data.iTarget << "," << data.torqueTarget << "," << data.qActual << "," << data.dqActual << "," << data.iActual << "," << data.accValues << "," << data.tcpForce << "," << data.toolPose << "," << data.tcpSpeed << std::endl;
+        }
+        if (buttons[3] == 1)
+        {
+            robotUR5->move_to_q(rw::math::Q(6, 0, -1.57, 1.57, 0, 1.57, -3.14), 100, 3000);
+            q_ghost = rw::math::Q(6, 0, -1.57, 1.57, 0, 1.57, -3.14);
+            _ghost->setQ(q_ghost, _state);
+            _robot->setQ(q_ghost, _state);
+            getRobWorkStudio()->setState(_state);
+            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         ros::spinOnce();
